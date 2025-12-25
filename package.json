@@ -3,7 +3,8 @@
     "version": "1.0.0",
     "description": "ChatGPT-like Chat Interface with Model Selection",
     "scripts": {
-        "serve": "npx http-server . -c-1 -o"
+        "serve": "npx http-server . -c-1 -o",
+        "build": "node scripts/generate-env.js"
     },
     "keywords": [
         "chat",
