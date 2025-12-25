@@ -1,10 +1,11 @@
 /**
  * ChatHub - Main Chat Application
- * ChatGPT-like interface with model selection and RAG-based history
+ * ChatGPT-like interface with Firebase persistence and enhanced mobile features
  */
 
 import config from './config.js';
 import { chatIndexer } from './chat-indexer.js';
+import { chatStorage } from './chat-storage.js';
 
 class ChatApp {
     constructor() {
@@ -15,7 +16,7 @@ class ChatApp {
         this.sendBtn = document.getElementById('sendBtn');
         this.modelSelector = document.getElementById('modelSelector');
         this.newChatBtn = document.getElementById('newChatBtn');
-        this.clearBtn = document.getElementById('clearBtn');
+        this.newChatTopBtn = document.getElementById('newChatTopBtn');
         this.welcomeScreen = document.getElementById('welcomeScreen');
 
         // Sidebar elements
@@ -24,19 +25,28 @@ class ChatApp {
         this.menuToggle = document.getElementById('menuToggle');
         this.closeSidebarBtn = document.getElementById('closeSidebarBtn');
         this.chatList = document.getElementById('chatList');
+        this.chatSearch = document.getElementById('chatSearch');
+        this.recentChatsSection = document.getElementById('recentChats');
+        this.archivedChatsSection = document.getElementById('archivedChats');
+
+        // Context menu
+        this.contextMenu = document.getElementById('chatContextMenu');
 
         // State
         this.messages = [];
-        this.chatHistory = []; // All saved chats
+        this.chatHistory = [];
+        this.archivedChats = [];
         this.currentChatId = null;
         this.isLoading = false;
         this.currentModel = config.DEFAULT_MODEL;
+        this.longPressTimer = null;
+        this.selectedChatId = null;
 
         // Initialize
         this.init();
     }
 
-    init() {
+    async init() {
         // Setup event listeners
         this.sendBtn.addEventListener('click', () => this.sendMessage());
         this.inputField.addEventListener('keydown', (e) => {
@@ -59,12 +69,10 @@ class ChatApp {
             this.showSystemMessage(`Switched to ${this.getModelName(this.currentModel)}`);
         });
 
-        // New chat button
+        // New chat buttons
         this.newChatBtn.addEventListener('click', () => this.startNewChat());
-
-        // Clear button
-        if (this.clearBtn) {
-            this.clearBtn.addEventListener('click', () => this.clearChat());
+        if (this.newChatTopBtn) {
+            this.newChatTopBtn.addEventListener('click', () => this.startNewChat());
         }
 
         // Sidebar toggle
@@ -78,6 +86,24 @@ class ChatApp {
             this.sidebarOverlay.addEventListener('click', () => this.toggleSidebar(false));
         }
 
+        // Search functionality
+        if (this.chatSearch) {
+            this.chatSearch.addEventListener('input', (e) => this.filterChats(e.target.value));
+        }
+
+        // Context menu handlers
+        this.setupContextMenu();
+
+        // Archived section toggle
+        if (this.archivedChatsSection) {
+            const title = this.archivedChatsSection.querySelector('.chat-list-title');
+            if (title) {
+                title.addEventListener('click', () => {
+                    this.archivedChatsSection.classList.toggle('expanded');
+                });
+            }
+        }
+
         // Suggestion cards
         document.querySelectorAll('.suggestion-card').forEach(card => {
             card.addEventListener('click', () => {
@@ -89,8 +115,11 @@ class ChatApp {
             });
         });
 
-        // Load saved data
-        this.loadChatHistory();
+        // Close context menu on click outside
+        document.addEventListener('click', () => this.hideContextMenu());
+
+        // Load saved data from Firebase
+        await this.loadChatHistory();
         this.loadCurrentChat();
 
         // Show welcome if empty
@@ -141,10 +170,118 @@ class ChatApp {
         `;
         this.messagesContainer.appendChild(msgDiv);
         this.scrollToBottom();
-
         setTimeout(() => msgDiv.remove(), 3000);
     }
 
+    // ========================================
+    // Search Functionality
+    // ========================================
+    filterChats(query) {
+        const q = query.toLowerCase().trim();
+        const allItems = this.chatList.querySelectorAll('.chat-list-item');
+
+        allItems.forEach(item => {
+            const title = item.textContent.toLowerCase();
+            item.style.display = title.includes(q) ? 'flex' : 'none';
+        });
+    }
+
+    // ========================================
+    // Context Menu (Long-press)
+    // ========================================
+    setupContextMenu() {
+        // Setup context menu action buttons
+        this.contextMenu.querySelectorAll('.context-menu-item').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const action = btn.dataset.action;
+                if (action === 'delete') {
+                    this.deleteChatById(this.selectedChatId);
+                } else if (action === 'archive') {
+                    this.archiveChatById(this.selectedChatId);
+                }
+                this.hideContextMenu();
+            });
+        });
+    }
+
+    showContextMenu(x, y, chatId) {
+        this.selectedChatId = chatId;
+
+        // Check if this is an archived chat
+        const isArchived = this.archivedChats.some(c => c.id === chatId);
+        const archiveBtn = this.contextMenu.querySelector('[data-action="archive"]');
+        if (archiveBtn) {
+            archiveBtn.innerHTML = isArchived ? '<span>📤</span> Unarchive' : '<span>📦</span> Archive';
+        }
+
+        this.contextMenu.style.display = 'block';
+        this.contextMenu.style.left = `${x}px`;
+        this.contextMenu.style.top = `${y}px`;
+    }
+
+    hideContextMenu() {
+        this.contextMenu.style.display = 'none';
+        this.selectedChatId = null;
+    }
+
+    async deleteChatById(chatId) {
+        if (!chatId) return;
+
+        try {
+            await chatStorage.deleteChat(chatId);
+
+            // Remove from local arrays
+            this.chatHistory = this.chatHistory.filter(c => c.id !== chatId);
+            this.archivedChats = this.archivedChats.filter(c => c.id !== chatId);
+
+            // If current chat was deleted, start new
+            if (this.currentChatId === chatId) {
+                this.startNewChat();
+            }
+
+            this.renderChatList();
+            this.showSystemMessage('Chat deleted');
+        } catch (error) {
+            console.error('Delete error:', error);
+        }
+    }
+
+    async archiveChatById(chatId) {
+        if (!chatId) return;
+
+        try {
+            const isArchived = this.archivedChats.some(c => c.id === chatId);
+
+            if (isArchived) {
+                await chatStorage.unarchiveChat(chatId);
+                const chat = this.archivedChats.find(c => c.id === chatId);
+                this.archivedChats = this.archivedChats.filter(c => c.id !== chatId);
+                if (chat) {
+                    chat.archived = false;
+                    this.chatHistory.unshift(chat);
+                }
+                this.showSystemMessage('Chat unarchived');
+            } else {
+                await chatStorage.archiveChat(chatId);
+                const chat = this.chatHistory.find(c => c.id === chatId);
+                this.chatHistory = this.chatHistory.filter(c => c.id !== chatId);
+                if (chat) {
+                    chat.archived = true;
+                    this.archivedChats.unshift(chat);
+                }
+                this.showSystemMessage('Chat archived');
+            }
+
+            this.renderChatList();
+        } catch (error) {
+            console.error('Archive error:', error);
+        }
+    }
+
+    // ========================================
+    // Message Handling
+    // ========================================
     async sendMessage() {
         const text = this.inputField.value.trim();
         if (!text || this.isLoading) return;
@@ -156,6 +293,19 @@ class ChatApp {
         // Clear input
         this.inputField.value = '';
         this.inputField.style.height = 'auto';
+
+        // Auto-save: Create new chat on first message if needed
+        const isFirstMessage = this.messages.length === 0;
+        if (isFirstMessage && !this.currentChatId) {
+            try {
+                const title = chatStorage.generateTitle(text);
+                const chat = await chatStorage.createChat(title, []);
+                this.currentChatId = chat.id;
+                console.log('Auto-created chat:', this.currentChatId);
+            } catch (error) {
+                console.error('Failed to auto-create chat:', error);
+            }
+        }
 
         // Add user message
         this.addMessage('user', text);
@@ -189,26 +339,24 @@ class ChatApp {
         }
     }
 
-    addMessage(role, content) {
+    async addMessage(role, content) {
         // Save to state
-        this.messages.push({ role, content, timestamp: Date.now() });
-        this.saveCurrentChat();
+        const message = { role, content, timestamp: Date.now() };
+        this.messages.push(message);
 
-        // Render message
+        // Render message to DOM FIRST (before async Firebase save)
         const msgDiv = document.createElement('div');
         msgDiv.className = `message message-${role}`;
 
         const senderName = 'ChatHub';
 
         if (role === 'user') {
-            // User messages - simple bubble on right
             msgDiv.innerHTML = `
                 <div class="message-content">
                     <div class="message-bubble">${this.escapeHtml(content)}</div>
                 </div>
             `;
         } else {
-            // Assistant messages - left aligned with sender name
             msgDiv.innerHTML = `
                 <div class="message-content">
                     <div class="message-sender">${senderName}</div>
@@ -223,6 +371,20 @@ class ChatApp {
         this.messagesContainer.appendChild(msgDiv);
         this.scrollToBottom();
 
+        // Save to Firebase AFTER DOM update (non-blocking)
+        if (this.currentChatId) {
+            chatStorage.addMessage(this.currentChatId, role, content).then(() => {
+                // Update title if first user message
+                if (role === 'user' && this.messages.filter(m => m.role === 'user').length === 1) {
+                    const title = chatStorage.generateTitle(content);
+                    chatStorage.updateChat(this.currentChatId, { title });
+                    this.loadChatHistory(); // Refresh list
+                }
+            }).catch(error => {
+                console.error('Failed to save message:', error);
+            });
+        }
+
         return msgDiv.querySelector('.message-text');
     }
 
@@ -236,7 +398,6 @@ class ChatApp {
         if (typeof marked !== 'undefined') {
             return marked.parse(text || '');
         }
-        // Fallback
         return text
             .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
             .replace(/`([^`]+)`/g, '<code>$1</code>')
@@ -281,7 +442,6 @@ class ChatApp {
     }
 
     scrollToBottom() {
-        // Use requestAnimationFrame for smoother scrolling during streaming
         requestAnimationFrame(() => {
             this.chatArea.scrollTop = this.chatArea.scrollHeight;
         });
@@ -377,28 +537,34 @@ RULES:
             }
         }
 
-        // Save complete message
-        this.messages.push({
+        // Save complete message to Firebase
+        const message = {
             role: 'assistant',
             content: fullResponse,
             timestamp: Date.now(),
             model: this.currentModel
-        });
-        this.saveCurrentChat();
+        };
+        this.messages.push(message);
+
+        if (this.currentChatId) {
+            try {
+                await chatStorage.addMessage(this.currentChatId, 'assistant', fullResponse);
+            } catch (error) {
+                console.error('Failed to save assistant message:', error);
+            }
+        }
 
         return fullResponse;
     }
 
-    startNewChat() {
-        // Save current chat to history if it has messages
-        if (this.messages.length > 0) {
-            this.saveChatToHistory();
-        }
-
-        // Generate a truly unique ID for the new chat
-        this.currentChatId = `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // ========================================
+    // Chat Management
+    // ========================================
+    async startNewChat() {
+        // Current chat is already saved incrementally, just reset
+        this.currentChatId = null;
         this.messages = [];
-        this.saveCurrentChat();
+        localStorage.removeItem('chatHub_currentId');
 
         // Clear UI
         const messages = this.messagesContainer.querySelectorAll('.message');
@@ -408,170 +574,143 @@ RULES:
         this.updateWelcomeVisibility();
         if (this.welcomeScreen) this.welcomeScreen.style.display = 'flex';
 
+        // Refresh list
+        await this.loadChatHistory();
         this.inputField.focus();
         this.toggleSidebar(false);
     }
 
-    clearChat() {
-        if (confirm('Clear all chat history?')) {
-            this.chatHistory = [];
-            localStorage.removeItem('chatHub_history');
-            this.startNewChat();
-            this.renderChatList();
-        }
-    }
-
-    saveChatToHistory() {
-        if (this.messages.length === 0) return;
-
-        // Title is first question, truncated
-        const firstUserMsg = this.messages.find(m => m.role === 'user');
-        const title = firstUserMsg?.content?.slice(0, 50) || 'New Chat';
-
-        const chat = {
-            id: this.currentChatId,
-            title: title,
-            messages: [...this.messages],
-            updatedAt: Date.now()
-        };
-
-        // Check if this exact chat ID exists
-        const existingIndex = this.chatHistory.findIndex(c => c.id === chat.id);
-        if (existingIndex >= 0) {
-            // Update existing
-            this.chatHistory[existingIndex] = chat;
-        } else {
-            // Add new chat - no limit on number of chats
-            this.chatHistory.unshift(chat);
-        }
-
-        localStorage.setItem('chatHub_history', JSON.stringify(this.chatHistory));
-        this.renderChatList();
-    }
-
-    loadChatHistory() {
+    async loadChatHistory() {
         try {
-            const saved = localStorage.getItem('chatHub_history');
-            if (saved) {
-                this.chatHistory = JSON.parse(saved);
-                this.renderChatList();
-            }
-        } catch (e) {
+            const chats = await chatStorage.loadChats(true);
+            this.chatHistory = chats.filter(c => !c.archived);
+            this.archivedChats = chats.filter(c => c.archived);
+            this.renderChatList();
+        } catch (error) {
+            console.error('Failed to load chat history:', error);
             this.chatHistory = [];
+            this.archivedChats = [];
         }
     }
 
     renderChatList() {
-        const section = this.chatList.querySelector('.chat-list-section');
-        if (!section) return;
+        // Render recent chats
+        if (this.recentChatsSection) {
+            const items = this.chatHistory.map(chat => this.createChatListItem(chat)).join('');
+            this.recentChatsSection.innerHTML = `
+                <div class="chat-list-title">Recent</div>
+                ${items || '<div style="color: var(--text-muted); padding: 12px; font-size: 13px;">No chats yet</div>'}
+            `;
+        }
 
-        const items = this.chatHistory.slice(0, 20).map(chat => `
-            <div class="chat-list-item ${chat.id === this.currentChatId ? 'active' : ''}" data-id="${chat.id}">
-                💬 ${this.escapeHtml(chat.title)}
-            </div>
-        `).join('');
+        // Render archived chats
+        if (this.archivedChatsSection) {
+            if (this.archivedChats.length > 0) {
+                this.archivedChatsSection.style.display = 'block';
+                const items = this.archivedChats.map(chat => this.createChatListItem(chat, true)).join('');
+                this.archivedChatsSection.innerHTML = `
+                    <div class="chat-list-title">Archived (${this.archivedChats.length})</div>
+                    ${items}
+                `;
+            } else {
+                this.archivedChatsSection.style.display = 'none';
+            }
+        }
 
-        section.innerHTML = `
-            <div class="chat-list-title">Recent</div>
-            ${items || '<div style="color: var(--text-muted); padding: 12px; font-size: 13px;">No chats yet</div>'}
-        `;
+        // Add event handlers
+        this.chatList.querySelectorAll('.chat-list-item').forEach(item => {
+            const chatId = item.dataset.id;
 
-        // Add click handlers
-        section.querySelectorAll('.chat-list-item').forEach(item => {
+            // Tap to load
             item.addEventListener('click', () => {
-                this.loadChatById(item.dataset.id);
+                this.loadChatById(chatId);
+            });
+
+            // Long press for context menu (mobile)
+            item.addEventListener('touchstart', (e) => {
+                this.longPressTimer = setTimeout(() => {
+                    const touch = e.touches[0];
+                    this.showContextMenu(touch.clientX, touch.clientY, chatId);
+                }, 500);
+            });
+
+            item.addEventListener('touchend', () => {
+                clearTimeout(this.longPressTimer);
+            });
+
+            item.addEventListener('touchmove', () => {
+                clearTimeout(this.longPressTimer);
+            });
+
+            // Right-click for context menu (desktop)
+            item.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                this.showContextMenu(e.clientX, e.clientY, chatId);
             });
         });
     }
 
-    loadChatById(chatId) {
-        const chat = this.chatHistory.find(c => c.id === chatId);
-        if (!chat) return;
-
-        this.currentChatId = chat.id;
-        this.messages = [...chat.messages];
-
-        // Clear and re-render
-        const msgs = this.messagesContainer.querySelectorAll('.message');
-        msgs.forEach(m => m.remove());
-        if (this.welcomeScreen) this.welcomeScreen.style.display = 'none';
-
-        for (const msg of this.messages) {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `message message-${msg.role}`;
-
-            if (msg.role === 'user') {
-                msgDiv.innerHTML = `
-                    <div class="message-content">
-                        <div class="message-bubble">${this.escapeHtml(msg.content)}</div>
-                    </div>
-                `;
-            } else {
-                msgDiv.innerHTML = `
-                    <div class="message-content">
-                        <div class="message-sender">ChatHub</div>
-                        <div class="message-text"></div>
-                    </div>
-                `;
-                const textEl = msgDiv.querySelector('.message-text');
-                textEl.innerHTML = this.renderMarkdown(msg.content);
-                this.highlightCode(textEl);
-            }
-
-            this.messagesContainer.appendChild(msgDiv);
-        }
-
-        this.scrollToBottom();
-        this.renderChatList();
-        this.toggleSidebar(false);
+    createChatListItem(chat, isArchived = false) {
+        const activeClass = chat.id === this.currentChatId ? 'active' : '';
+        const archivedClass = isArchived ? 'archived' : '';
+        return `
+            <div class="chat-list-item ${activeClass} ${archivedClass}" data-id="${chat.id}">
+                💬 ${this.escapeHtml(chat.title || 'New Chat')}
+            </div>
+        `;
     }
 
-    saveCurrentChat() {
+    async loadChatById(chatId) {
         try {
-            if (!this.currentChatId) {
-                this.currentChatId = Date.now().toString();
-            }
+            const chat = await chatStorage.loadChat(chatId);
+            if (!chat) return;
+
+            this.currentChatId = chat.id;
+            this.messages = chat.messages || [];
             localStorage.setItem('chatHub_currentId', this.currentChatId);
-            localStorage.setItem('chatHub_messages', JSON.stringify(this.messages));
-        } catch (e) {
-            console.warn('Failed to save:', e);
+
+            // Clear and re-render
+            const msgs = this.messagesContainer.querySelectorAll('.message');
+            msgs.forEach(m => m.remove());
+            if (this.welcomeScreen) this.welcomeScreen.style.display = 'none';
+
+            for (const msg of this.messages) {
+                const msgDiv = document.createElement('div');
+                msgDiv.className = `message message-${msg.role}`;
+
+                if (msg.role === 'user') {
+                    msgDiv.innerHTML = `
+                        <div class="message-content">
+                            <div class="message-bubble">${this.escapeHtml(msg.content)}</div>
+                        </div>
+                    `;
+                } else {
+                    msgDiv.innerHTML = `
+                        <div class="message-content">
+                            <div class="message-sender">ChatHub</div>
+                            <div class="message-text"></div>
+                        </div>
+                    `;
+                    const textEl = msgDiv.querySelector('.message-text');
+                    textEl.innerHTML = this.renderMarkdown(msg.content);
+                    this.highlightCode(textEl);
+                }
+
+                this.messagesContainer.appendChild(msgDiv);
+            }
+
+            this.scrollToBottom();
+            this.renderChatList();
+            this.toggleSidebar(false);
+        } catch (error) {
+            console.error('Failed to load chat:', error);
         }
     }
 
     loadCurrentChat() {
-        try {
-            this.currentChatId = localStorage.getItem('chatHub_currentId') || `chat_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-            const saved = localStorage.getItem('chatHub_messages');
-            if (saved) {
-                this.messages = JSON.parse(saved);
-                for (const msg of this.messages) {
-                    const msgDiv = document.createElement('div');
-                    msgDiv.className = `message message-${msg.role}`;
-
-                    if (msg.role === 'user') {
-                        msgDiv.innerHTML = `
-                            <div class="message-content">
-                                <div class="message-bubble">${this.escapeHtml(msg.content)}</div>
-                            </div>
-                        `;
-                    } else {
-                        msgDiv.innerHTML = `
-                            <div class="message-content">
-                                <div class="message-sender">ChatHub</div>
-                                <div class="message-text"></div>
-                            </div>
-                        `;
-                        const textEl = msgDiv.querySelector('.message-text');
-                        textEl.innerHTML = this.renderMarkdown(msg.content);
-                        this.highlightCode(textEl);
-                    }
-
-                    this.messagesContainer.appendChild(msgDiv);
-                }
-                this.scrollToBottom();
-            }
-        } catch (e) {
-            this.messages = [];
+        const savedId = localStorage.getItem('chatHub_currentId');
+        if (savedId) {
+            this.loadChatById(savedId);
         }
     }
 

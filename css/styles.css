@@ -88,8 +88,34 @@ body {
 
 .sidebar-header {
     padding: 12px;
+    padding-top: calc(12px + env(safe-area-inset-top, 0px));
     display: flex;
     gap: 8px;
+}
+
+/* Sidebar Search Bar */
+.sidebar-search {
+    padding: 0 12px 12px;
+}
+
+.chat-search-input {
+    width: 100%;
+    padding: 10px 14px;
+    background-color: var(--bg-input);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 14px;
+    outline: none;
+    transition: border-color var(--transition-fast);
+}
+
+.chat-search-input::placeholder {
+    color: var(--text-muted);
+}
+
+.chat-search-input:focus {
+    border-color: var(--accent);
 }
 
 .sidebar-btn {
@@ -1077,4 +1103,64 @@ body {
 .hljs-meta {
     color: #61afef !important;
     /* Blue - decorators */
+}
+
+/* ========================================
+   Context Menu for Chat Items
+   ======================================== */
+.chat-context-menu {
+    position: fixed;
+    z-index: 1000;
+    background-color: var(--bg-sidebar);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+    min-width: 150px;
+    overflow: hidden;
+}
+
+.context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 12px 16px;
+    background: transparent;
+    border: none;
+    color: var(--text-primary);
+    font-size: 14px;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+    text-align: left;
+}
+
+.context-menu-item:hover {
+    background-color: var(--bg-hover);
+}
+
+.context-menu-item[data-action="delete"]:hover {
+    background-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+}
+
+/* Archived Section */
+.archived-section .chat-list-title {
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.archived-section .chat-list-title::before {
+    content: '▶';
+    font-size: 10px;
+    transition: transform var(--transition-fast);
+}
+
+.archived-section.expanded .chat-list-title::before {
+    transform: rotate(90deg);
+}
+
+.chat-list-item.archived {
+    opacity: 0.7;
 }
