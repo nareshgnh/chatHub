@@ -53,10 +53,19 @@
                 </button>
             </div>
 
+            <!-- Search Bar -->
+            <div class="sidebar-search">
+                <input type="text" id="chatSearch" placeholder="Search chats..." class="chat-search-input">
+            </div>
+
             <div class="chat-list" id="chatList">
-                <div class="chat-list-section">
-                    <div class="chat-list-title">Today</div>
+                <div class="chat-list-section" id="recentChats">
+                    <div class="chat-list-title">Recent</div>
                     <!-- Chat history items will be rendered by JS -->
+                </div>
+                <div class="chat-list-section archived-section" id="archivedChats" style="display: none;">
+                    <div class="chat-list-title">Archived</div>
+                    <!-- Archived chats will be rendered by JS -->
                 </div>
             </div>
 
@@ -67,6 +76,16 @@
                 </div>
             </div>
         </aside>
+
+        <!-- Context Menu for Chat Items -->
+        <div class="chat-context-menu" id="chatContextMenu" style="display: none;">
+            <button class="context-menu-item" data-action="delete">
+                <span>🗑️</span> Delete
+            </button>
+            <button class="context-menu-item" data-action="archive">
+                <span>📦</span> Archive
+            </button>
+        </div>
 
         <!-- Main Content -->
         <main class="main-content">
@@ -83,8 +102,8 @@
                 </div>
 
                 <div class="top-bar-right">
-                    <button class="top-bar-btn" id="clearBtn" title="Clear chat">
-                        🗑️
+                    <button class="top-bar-btn" id="newChatTopBtn" title="New chat">
+                        ✏️
                     </button>
                 </div>
             </header>
