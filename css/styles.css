@@ -701,7 +701,7 @@ body {
     bottom: 0;
     left: 0;
     right: 0;
-    padding: 16px 24px 24px;
+    padding: 12px 16px 12px;
     background: linear-gradient(to bottom, transparent 0%, var(--bg-main) 50%);
 }
 
@@ -944,7 +944,7 @@ body {
     }
 
     .input-container {
-        padding: 8px 12px 16px;
+        padding: 8px 12px 8px;
     }
 
     .input-box {
@@ -1022,13 +1022,14 @@ body {
 @media (display-mode: standalone) {
     body {
         padding-top: env(safe-area-inset-top);
-        padding-bottom: env(safe-area-inset-bottom);
+        padding-bottom: 0;
+        /* Remove default padding, handled by input-container */
         padding-left: env(safe-area-inset-left);
         padding-right: env(safe-area-inset-right);
     }
 
     .input-container {
-        padding-bottom: calc(24px + env(safe-area-inset-bottom));
+        padding-bottom: calc(8px + env(safe-area-inset-bottom));
     }
 }
 
@@ -1163,4 +1164,13 @@ body {
 
 .chat-list-item.archived {
     opacity: 0.7;
+}
+
+/* Pull-to-Refresh Indicator */
+.pull-refresh-indicator {
+    text-align: center;
+    padding: 16px;
+    color: var(--text-tertiary);
+    font-size: 14px;
+    animation: fadeIn 0.2s ease;
 }
