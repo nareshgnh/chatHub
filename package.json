@@ -1,0 +1,17 @@
+{
+    "name": "chat-hub",
+    "version": "1.0.0",
+    "description": "ChatGPT-like Chat Interface with Model Selection",
+    "scripts": {
+        "serve": "npx http-server . -c-1 -o"
+    },
+    "keywords": [
+        "chat",
+        "ai",
+        "groq",
+        "llm"
+    ],
+    "author": "Naresh Gavvala",
+    "license": "ISC",
+    "dependencies": {}
+}

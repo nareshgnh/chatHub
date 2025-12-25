@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="description" content="ChatHub - Your personal AI assistant with model selection">
+    <meta name="theme-color" content="#212121">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="ChatHub">
+    <title>ChatHub</title>
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+
+    <!-- Favicon & Icons -->
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+    <link rel="apple-touch-icon" href="icons/icon.svg">
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <!-- Highlight.js -->
+    <link rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+
+    <!-- Marked.js -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+    <!-- App Styles -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Overlay (Mobile) -->
+        <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <button class="sidebar-btn" id="newChatBtn">
+                    <span>✏️</span>
+                    <span>New chat</span>
+                </button>
+                <button class="sidebar-btn icon-only" id="closeSidebarBtn">
+                    <span>◀</span>
+                </button>
+            </div>
+
+            <div class="chat-list" id="chatList">
+                <div class="chat-list-section">
+                    <div class="chat-list-title">Today</div>
+                    <!-- Chat history items will be rendered by JS -->
+                </div>
+            </div>
+
+            <div class="sidebar-footer">
+                <div class="user-profile">
+                    <div class="user-avatar">N</div>
+                    <span class="user-name">Naresh Gavvala</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Bar -->
+            <header class="top-bar">
+                <button class="menu-toggle" id="menuToggle" aria-label="Toggle menu">
+                    <span>☰</span>
+                </button>
+
+                <div class="model-dropdown">
+                    <select id="modelSelector" class="model-selector" title="Select AI Model">
+                        <!-- Models populated by JS -->
+                    </select>
+                </div>
+
+                <div class="top-bar-right">
+                    <button class="top-bar-btn" id="clearBtn" title="Clear chat">
+                        🗑️
+                    </button>
+                </div>
+            </header>
+
+            <!-- Chat Area -->
+            <div class="chat-area" id="chatArea">
+                <div class="chat-messages" id="chatMessages">
+                    <!-- Welcome Screen - shown when no messages -->
+                    <div class="welcome-screen" id="welcomeScreen">
+                        <div class="welcome-logo">💬</div>
+                        <h1 class="welcome-title">How can I help you today?</h1>
+                        <p class="welcome-subtitle">Ask me anything - I'm here to help!</p>
+
+                        <div class="welcome-suggestions">
+                            <div class="suggestion-card" data-prompt="Explain quantum computing in simple terms">
+                                <div class="suggestion-title">Explain a concept</div>
+                                <div class="suggestion-desc">Quantum computing in simple terms</div>
+                            </div>
+                            <div class="suggestion-card" data-prompt="Write a Python function to sort a list">
+                                <div class="suggestion-title">Write code</div>
+                                <div class="suggestion-desc">Python function to sort a list</div>
+                            </div>
+                            <div class="suggestion-card" data-prompt="What are the best practices for REST API design?">
+                                <div class="suggestion-title">Best practices</div>
+                                <div class="suggestion-desc">REST API design guidelines</div>
+                            </div>
+                            <div class="suggestion-card" data-prompt="Help me debug my code">
+                                <div class="suggestion-title">Debug help</div>
+                                <div class="suggestion-desc">Find and fix issues in code</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Input Area -->
+            <div class="input-container">
+                <div class="input-wrapper">
+                    <div class="input-box">
+                        <button class="attach-btn" title="Attach file">+</button>
+                        <textarea id="chatInput" placeholder="Ask anything..." rows="1" autofocus></textarea>
+                        <div class="input-actions">
+                            <button class="mic-btn" title="Voice input">🎤</button>
+                            <button id="sendBtn" title="Send message">➤</button>
+                        </div>
+                    </div>
+                    <div class="input-footer">
+                        <span class="input-footer-text">ChatHub can make mistakes. Check important info.</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Service Worker Registration -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(reg => console.log('SW registered:', reg.scope))
+                    .catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
+
+    <!-- App Script -->
+    <!-- Environment Variables -->
+    <script src="js/env.js"></script>
+    <script type="module" src="js/chat-app.js"></script>
+</body>
+
+</html>
