@@ -344,23 +344,7 @@ class ChatApp {
         const message = { role, content, timestamp: Date.now() };
         this.messages.push(message);
 
-        // Save to Firebase
-        if (this.currentChatId) {
-            try {
-                await chatStorage.addMessage(this.currentChatId, role, content);
-
-                // Update title if first user message
-                if (role === 'user' && this.messages.filter(m => m.role === 'user').length === 1) {
-                    const title = chatStorage.generateTitle(content);
-                    await chatStorage.updateChat(this.currentChatId, { title });
-                    this.loadChatHistory(); // Refresh list
-                }
-            } catch (error) {
-                console.error('Failed to save message:', error);
-            }
-        }
-
-        // Render message
+        // Render message to DOM FIRST (before async Firebase save)
         const msgDiv = document.createElement('div');
         msgDiv.className = `message message-${role}`;
 
@@ -386,6 +370,20 @@ class ChatApp {
 
         this.messagesContainer.appendChild(msgDiv);
         this.scrollToBottom();
+
+        // Save to Firebase AFTER DOM update (non-blocking)
+        if (this.currentChatId) {
+            chatStorage.addMessage(this.currentChatId, role, content).then(() => {
+                // Update title if first user message
+                if (role === 'user' && this.messages.filter(m => m.role === 'user').length === 1) {
+                    const title = chatStorage.generateTitle(content);
+                    chatStorage.updateChat(this.currentChatId, { title });
+                    this.loadChatHistory(); // Refresh list
+                }
+            }).catch(error => {
+                console.error('Failed to save message:', error);
+            });
+        }
 
         return msgDiv.querySelector('.message-text');
     }
