@@ -1,5 +1,7 @@
 const fs = require('fs');
 const path = require('path');
+require('dotenv').config();
+
 
 // Only run if GROQ_API_KEY environment variable is present
 // This protects local development where you might have a manual env.js
