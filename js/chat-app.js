@@ -118,6 +118,9 @@ class ChatApp {
         // Close context menu on click outside
         document.addEventListener('click', () => this.hideContextMenu());
 
+        // Pull-to-refresh setup for mobile PWA
+        this.setupPullToRefresh();
+
         // Load saved data from Firebase
         await this.loadChatHistory();
         this.loadCurrentChat();
@@ -127,6 +130,60 @@ class ChatApp {
 
         // Focus input
         this.inputField.focus();
+    }
+
+    // ========================================
+    // Pull-to-Refresh for Mobile PWA
+    // ========================================
+    setupPullToRefresh() {
+        let startY = 0;
+        let isPulling = false;
+        const threshold = 80;
+
+        this.chatArea.addEventListener('touchstart', (e) => {
+            if (this.chatArea.scrollTop === 0) {
+                startY = e.touches[0].clientY;
+                isPulling = true;
+            }
+        }, { passive: true });
+
+        this.chatArea.addEventListener('touchmove', (e) => {
+            if (!isPulling) return;
+            const currentY = e.touches[0].clientY;
+            const pullDistance = currentY - startY;
+
+            if (pullDistance > 30 && this.chatArea.scrollTop === 0) {
+                // Show pull indicator
+                if (!document.querySelector('.pull-refresh-indicator')) {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'pull-refresh-indicator';
+                    indicator.innerHTML = pullDistance > threshold ? '↻ Release to refresh' : '↓ Pull to refresh';
+                    this.chatArea.insertBefore(indicator, this.chatArea.firstChild);
+                } else {
+                    document.querySelector('.pull-refresh-indicator').innerHTML =
+                        pullDistance > threshold ? '↻ Release to refresh' : '↓ Pull to refresh';
+                }
+            }
+        }, { passive: true });
+
+        this.chatArea.addEventListener('touchend', async () => {
+            const indicator = document.querySelector('.pull-refresh-indicator');
+
+            if (indicator && indicator.innerHTML.includes('Release')) {
+                indicator.innerHTML = '⟳ Refreshing...';
+                try {
+                    await this.loadChatHistory();
+                    this.showSystemMessage('Synced from cloud ✓');
+                } catch (error) {
+                    console.error('Refresh failed:', error);
+                }
+            }
+
+            if (indicator) {
+                setTimeout(() => indicator.remove(), 500);
+            }
+            isPulling = false;
+        }, { passive: true });
     }
 
     populateModelSelector() {

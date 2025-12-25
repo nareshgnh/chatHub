@@ -117,7 +117,7 @@ class ChatStorage {
     }
 
     /**
-     * Load all chats for this device
+     * Load all chats (synced across all devices)
      * @param {boolean} includeArchived - Include archived chats
      * @returns {Array} Array of chat objects
      */
@@ -133,16 +133,14 @@ class ChatStorage {
 
             querySnapshot.forEach((doc) => {
                 const data = doc.data();
-                // Only show chats from this device
-                if (data.deviceId === this.deviceId) {
-                    if (includeArchived || !data.archived) {
-                        chats.push({
-                            id: doc.id,
-                            ...data,
-                            createdAt: data.createdAt?.toDate?.() || new Date(),
-                            updatedAt: data.updatedAt?.toDate?.() || new Date()
-                        });
-                    }
+                // Sync all chats across all devices (no deviceId filter)
+                if (includeArchived || !data.archived) {
+                    chats.push({
+                        id: doc.id,
+                        ...data,
+                        createdAt: data.createdAt?.toDate?.() || new Date(),
+                        updatedAt: data.updatedAt?.toDate?.() || new Date()
+                    });
                 }
             });
 
