@@ -13,6 +13,11 @@ const config = {
             id: 'llama-3.3-70b-versatile',
             name: 'LLaMA 3.3 70B',
             description: 'Meta LLaMA 3.3 70B Versatile'
+        },
+        {
+            id: 'llama-3.1-8b-instant',
+            name: 'LLaMA 3.1 8B',
+            description: 'Meta LLaMA 3.1 8B Instant'
         }
     ],
 

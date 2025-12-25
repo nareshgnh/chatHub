@@ -255,7 +255,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
+    padding: 8px 12px;
     flex-shrink: 0;
 }
 
@@ -605,25 +605,31 @@ body {
     line-height: 1.5;
 }
 
-/* Tables */
+/* Tables - Completely clean style with no lines */
+.message-text .table-wrapper {
+    overflow-x: auto;
+    margin: 1rem 0;
+    -webkit-overflow-scrolling: touch;
+}
+
 .message-text table {
     width: 100%;
     border-collapse: collapse;
-    margin: 1rem 0;
     font-size: 0.9rem;
+    min-width: max-content;
 }
 
 .message-text th,
 .message-text td {
-    padding: 0.75rem;
-    border: 1px solid var(--border-color);
+    padding: 0.6rem 1rem;
     text-align: left;
+    border: none;
+    background: transparent;
 }
 
 .message-text th {
-    background-color: rgba(255, 255, 255, 0.05);
     font-weight: 600;
-    color: var(--accent-primary);
+    color: var(--text-primary);
 }
 
 /* Blockquotes */
@@ -1036,12 +1042,20 @@ body {
 /* iOS specific adjustments */
 @supports (-webkit-touch-callout: none) {
     .input-box {
-        padding-bottom: 14px;
+        padding-bottom: 10px;
     }
 
     #chatInput {
         font-size: 16px;
         /* Prevents zoom on iOS */
+    }
+
+    /* Fix keyboard gap on iOS */
+    .input-container {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
     }
 }
 

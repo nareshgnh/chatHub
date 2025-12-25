@@ -49,8 +49,14 @@ class ChatApp {
     async init() {
         // Setup event listeners
         this.sendBtn.addEventListener('click', () => this.sendMessage());
+
+        // Keyboard: Enter adds newline, button sends (mobile-friendly)
+        // On desktop, keep Shift+Enter for newline, Enter to send
         this.inputField.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            // Mobile: let Enter add newlines naturally, use send button
+            // Desktop: Shift+Enter for newline, Enter to send
+            const isMobile = window.matchMedia('(max-width: 768px)').matches;
+            if (e.key === 'Enter' && !e.shiftKey && !isMobile) {
                 e.preventDefault();
                 this.sendMessage();
             }
@@ -414,14 +420,15 @@ class ChatApp {
                 </div>
             `;
         } else {
+            // AI response - no sender label
             msgDiv.innerHTML = `
                 <div class="message-content">
-                    <div class="message-sender">${senderName}</div>
                     <div class="message-text"></div>
                 </div>
             `;
             const textEl = msgDiv.querySelector('.message-text');
             textEl.innerHTML = this.renderMarkdown(content);
+            this.wrapTables(textEl);
             this.highlightCode(textEl);
         }
 
@@ -447,12 +454,31 @@ class ChatApp {
 
     updateAssistantMessage(textEl, content) {
         textEl.innerHTML = this.renderMarkdown(content);
+        this.wrapTables(textEl);
         this.highlightCode(textEl);
         this.scrollToBottom();
     }
 
+    // Wrap tables in scrollable container for mobile
+    wrapTables(container) {
+        container.querySelectorAll('table').forEach(table => {
+            if (!table.parentElement.classList.contains('table-wrapper')) {
+                const wrapper = document.createElement('div');
+                wrapper.className = 'table-wrapper';
+                table.parentNode.insertBefore(wrapper, table);
+                wrapper.appendChild(table);
+            }
+        });
+    }
+
     renderMarkdown(text) {
         if (typeof marked !== 'undefined') {
+            // Configure marked for GitHub Flavored Markdown with tables
+            marked.setOptions({
+                gfm: true,
+                breaks: true,
+                tables: true
+            });
             return marked.parse(text || '');
         }
         return text
@@ -476,7 +502,6 @@ class ChatApp {
         indicator.className = 'message message-assistant typing-indicator-container';
         indicator.innerHTML = `
             <div class="message-content">
-                <div class="message-sender">ChatHub</div>
                 <div class="typing-indicator">
                     <span></span><span></span><span></span>
                 </div>
@@ -561,7 +586,6 @@ RULES:
         msgDiv.className = 'message message-assistant';
         msgDiv.innerHTML = `
             <div class="message-content">
-                <div class="message-sender">ChatHub</div>
                 <div class="message-text"></div>
             </div>
         `;
@@ -744,12 +768,12 @@ RULES:
                 } else {
                     msgDiv.innerHTML = `
                         <div class="message-content">
-                            <div class="message-sender">ChatHub</div>
                             <div class="message-text"></div>
                         </div>
                     `;
                     const textEl = msgDiv.querySelector('.message-text');
                     textEl.innerHTML = this.renderMarkdown(msg.content);
+                    this.wrapTables(textEl);
                     this.highlightCode(textEl);
                 }
 
