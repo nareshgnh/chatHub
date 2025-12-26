@@ -3,7 +3,7 @@
  * Enables offline functionality and PWA installation
  */
 
-const CACHE_NAME = 'chathub-v1';
+const CACHE_NAME = 'chathub-v4';
 const STATIC_ASSETS = [
     '/',
     '/index.html',

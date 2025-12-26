@@ -230,6 +230,125 @@ class ChatStorage {
         const title = message.substring(0, 50).trim();
         return title.length < message.length ? title + '...' : title;
     }
+
+    // ========================================
+    // User Preferences (synced across devices)
+    // ========================================
+
+    get PREFERENCES_DOC() {
+        return 'user_preferences';
+    }
+
+    /**
+     * Load user preferences from Firebase
+     * @returns {Object} User preferences
+     */
+    async loadPreferences() {
+        try {
+            const prefRef = doc(db, 'chathub_settings', this.PREFERENCES_DOC);
+            const prefDoc = await getDoc(prefRef);
+
+            if (prefDoc.exists()) {
+                return prefDoc.data();
+            }
+            return null;
+        } catch (error) {
+            console.error('Error loading preferences:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Save user preferences to Firebase
+     * @param {Object} preferences - Preferences to save
+     */
+    async savePreferences(preferences) {
+        try {
+            const { setDoc } = await import("https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js");
+            const prefRef = doc(db, 'chathub_settings', this.PREFERENCES_DOC);
+            await setDoc(prefRef, {
+                ...preferences,
+                updatedAt: serverTimestamp()
+            }, { merge: true });
+            console.log('Preferences saved');
+        } catch (error) {
+            console.error('Error saving preferences:', error);
+        }
+    }
+
+    /**
+     * Get selected model from preferences
+     * @returns {string|null} Selected model ID
+     */
+    async getSelectedModel() {
+        const prefs = await this.loadPreferences();
+        return prefs?.selectedModel || null;
+    }
+
+    /**
+     * Save selected model to preferences
+     * @param {string} modelId - Model ID to save
+     */
+    async saveSelectedModel(modelId) {
+        await this.savePreferences({ selectedModel: modelId });
+    }
+
+    /**
+     * Get saved suggestions and their generation date
+     * @returns {Object|null} { suggestions: [], generatedDate: Date }
+     */
+    async getSavedSuggestions() {
+        const prefs = await this.loadPreferences();
+        if (prefs?.suggestions && prefs?.suggestionsDate) {
+            return {
+                suggestions: prefs.suggestions,
+                generatedDate: prefs.suggestionsDate?.toDate?.() || new Date(prefs.suggestionsDate)
+            };
+        }
+        return null;
+    }
+
+    /**
+     * Save generated suggestions
+     * @param {Array} suggestions - Array of suggestion objects
+     */
+    async saveSuggestions(suggestions) {
+        await this.savePreferences({
+            suggestions: suggestions,
+            suggestionsDate: serverTimestamp()
+        });
+    }
+
+    /**
+     * Get recent chat topics for AI suggestion generation
+     * Returns a condensed summary of recent topics to minimize tokens
+     * @param {number} limit - Number of recent chats to analyze
+     * @returns {string} Condensed topics summary
+     */
+    async getRecentTopics(limit = 10) {
+        try {
+            const chats = await this.loadChats(false);
+            const recentChats = chats.slice(0, limit);
+
+            if (recentChats.length === 0) {
+                return '';
+            }
+
+            // Extract topics from chat titles and first user messages
+            const topics = recentChats.map(chat => {
+                const title = chat.title || '';
+                const firstUserMsg = chat.messages?.find(m => m.role === 'user')?.content || '';
+                // Take only first 100 chars of first message to save tokens
+                const snippet = firstUserMsg.substring(0, 100);
+                return `${title}: ${snippet}`;
+            }).join('\n');
+
+            return topics;
+        } catch (error) {
+            console.error('Error getting recent topics:', error);
+            return '';
+        }
+    }
 }
 
 // Export singleton instance
