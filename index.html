@@ -7,7 +7,7 @@
         content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <meta name="description" content="ChatHub - Your personal AI assistant with model selection">
     <meta name="theme-color" content="#212121">
-    <meta name="apple-mobile-web-app-capable" content="yes">
+    <!-- PWA capability handled by manifest.json display: standalone -->
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="ChatHub">
     <title>ChatHub</title>
@@ -29,8 +29,8 @@
         href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/atom-one-dark.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 
-    <!-- Marked.js -->
-    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <!-- Markdown-it - more robust markdown parser -->
+    <script src="https://cdn.jsdelivr.net/npm/markdown-it@14.1.0/dist/markdown-it.min.js"></script>
 
     <!-- App Styles -->
     <link rel="stylesheet" href="css/styles.css">
@@ -44,18 +44,20 @@
         <!-- Sidebar -->
         <aside class="sidebar" id="sidebar">
             <div class="sidebar-header">
-                <button class="sidebar-btn" id="newChatBtn">
+                <button class="sidebar-btn icon-only" id="closeSidebarBtn" title="Toggle sidebar"
+                    aria-label="Toggle sidebar">
+                    <span>☰</span>
+                </button>
+                <button class="sidebar-btn" id="newChatBtn" aria-label="Start new chat">
                     <span>✏️</span>
                     <span>New chat</span>
-                </button>
-                <button class="sidebar-btn icon-only" id="closeSidebarBtn">
-                    <span>◀</span>
                 </button>
             </div>
 
             <!-- Search Bar -->
             <div class="sidebar-search">
-                <input type="text" id="chatSearch" placeholder="Search chats..." class="chat-search-input">
+                <input type="text" id="chatSearch" placeholder="Search chats..." class="chat-search-input"
+                    aria-label="Search chats">
             </div>
 
             <div class="chat-list" id="chatList">
@@ -96,13 +98,14 @@
                 </button>
 
                 <div class="model-dropdown">
-                    <select id="modelSelector" class="model-selector" title="Select AI Model">
+                    <select id="modelSelector" class="model-selector" title="Select AI Model"
+                        aria-label="Select AI model">
                         <!-- Models populated by JS -->
                     </select>
                 </div>
 
                 <div class="top-bar-right">
-                    <button class="top-bar-btn" id="newChatTopBtn" title="New chat">
+                    <button class="top-bar-btn" id="newChatTopBtn" title="New chat" aria-label="Start new chat">
                         ✏️
                     </button>
                 </div>
@@ -117,23 +120,13 @@
                         <h1 class="welcome-title">How can I help you today?</h1>
                         <p class="welcome-subtitle">Ask me anything - I'm here to help!</p>
 
+                        <div class="suggestions-header">
+                            <span>Suggested for you</span>
+                            <button id="refreshSuggestionsBtn" class="refresh-suggestions-btn"
+                                title="Refresh suggestions" aria-label="Refresh suggestions">🔄</button>
+                        </div>
                         <div class="welcome-suggestions">
-                            <div class="suggestion-card" data-prompt="Explain quantum computing in simple terms">
-                                <div class="suggestion-title">Explain a concept</div>
-                                <div class="suggestion-desc">Quantum computing in simple terms</div>
-                            </div>
-                            <div class="suggestion-card" data-prompt="Write a Python function to sort a list">
-                                <div class="suggestion-title">Write code</div>
-                                <div class="suggestion-desc">Python function to sort a list</div>
-                            </div>
-                            <div class="suggestion-card" data-prompt="What are the best practices for REST API design?">
-                                <div class="suggestion-title">Best practices</div>
-                                <div class="suggestion-desc">REST API design guidelines</div>
-                            </div>
-                            <div class="suggestion-card" data-prompt="Help me debug my code">
-                                <div class="suggestion-title">Debug help</div>
-                                <div class="suggestion-desc">Find and fix issues in code</div>
-                            </div>
+                            <!-- Dynamic suggestions will be rendered here by JS -->
                         </div>
                     </div>
                 </div>
@@ -143,11 +136,11 @@
             <div class="input-container">
                 <div class="input-wrapper">
                     <div class="input-box">
-                        <button class="attach-btn" title="Attach file">+</button>
-                        <textarea id="chatInput" placeholder="Ask anything..." rows="1" autofocus></textarea>
+                        <button class="attach-btn" title="Attach file" aria-label="Attach file">+</button>
+                        <textarea id="chatInput" placeholder="Ask anything..." rows="1" autofocus
+                            aria-label="Message input"></textarea>
                         <div class="input-actions">
-                            <button class="mic-btn" title="Voice input">🎤</button>
-                            <button id="sendBtn" title="Send message">➤</button>
+                            <button id="sendBtn" title="Send message" aria-label="Send message">➤</button>
                         </div>
                     </div>
                 </div>

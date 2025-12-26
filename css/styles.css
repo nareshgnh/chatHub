@@ -1,6 +1,5 @@
 /* ========================================
-   ChatHub - ChatGPT-Inspired Design
-   Color palette matched with Learning Hub
+   ChatHub
    ======================================== */
 
 /* CSS Variables - Learning Hub Color Palette */
@@ -83,7 +82,46 @@ body {
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    transition: transform var(--transition-normal), width var(--transition-normal);
+    transition: width var(--transition-normal);
+    overflow: hidden;
+}
+
+/* Desktop collapsed state - show icons only (ChatGPT style) */
+.sidebar.collapsed {
+    width: 50px;
+    min-width: 50px;
+}
+
+.sidebar.collapsed .sidebar-header {
+    flex-direction: column;
+    padding: 8px 4px;
+    gap: 4px;
+}
+
+.sidebar.collapsed .sidebar-btn {
+    width: 42px;
+    padding: 10px;
+    justify-content: center;
+}
+
+/* Hide the text (second span) in buttons, keep the icon (first span) */
+.sidebar.collapsed .sidebar-btn span:nth-child(2) {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-search,
+.sidebar.collapsed .chat-list-title,
+.sidebar.collapsed .chat-list-item,
+.sidebar.collapsed .user-name {
+    display: none;
+}
+
+.sidebar.collapsed .sidebar-footer {
+    padding: 8px 4px;
+}
+
+.sidebar.collapsed .user-profile {
+    justify-content: center;
 }
 
 .sidebar-header {
@@ -224,6 +262,9 @@ body {
 .user-avatar {
     width: 32px;
     height: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    flex-shrink: 0;
     border-radius: 50%;
     background: linear-gradient(135deg, var(--accent), #1a7f64);
     display: flex;
@@ -271,6 +312,8 @@ body {
     cursor: pointer;
     transition: background-color var(--transition-fast);
 }
+
+/* Menu toggle only shown on mobile */
 
 .menu-toggle:hover {
     background-color: var(--bg-hover);
@@ -408,6 +451,44 @@ body {
     font-size: 16px;
     color: var(--text-secondary);
     margin-bottom: 32px;
+}
+
+/* Suggestions Header with Refresh Button */
+.suggestions-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    max-width: 600px;
+    margin-bottom: 12px;
+    padding: 0 4px;
+}
+
+.suggestions-header span {
+    font-size: 13px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+}
+
+.refresh-suggestions-btn {
+    background: transparent;
+    border: none;
+    font-size: 16px;
+    cursor: pointer;
+    padding: 4px 8px;
+    border-radius: var(--radius-sm);
+    transition: all var(--transition-fast);
+}
+
+.refresh-suggestions-btn:hover {
+    background-color: var(--bg-hover);
+    transform: scale(1.1);
+}
+
+.refresh-suggestions-btn.spinning {
+    animation: spin 0.8s linear infinite;
 }
 
 .welcome-suggestions {
@@ -580,10 +661,12 @@ body {
 /* Inline code with subtle background */
 .message-text code {
     font-family: 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
-    font-size: 0.9em;
-    background-color: rgba(255, 255, 255, 0.1);
-    padding: 0.2em 0.4em;
+    font-size: 0.875em;
+    background-color: rgba(255, 255, 255, 0.12);
+    padding: 0.2em 0.5em;
     border-radius: 4px;
+    color: #e6e6e6;
+    word-break: break-word;
 }
 
 /* Code blocks with border like Learning Hub */
@@ -595,6 +678,8 @@ body {
     margin: 1rem 0;
     border: 1px solid var(--border-color);
     max-width: 100%;
+    min-height: 2.5em;
+    /* Ensure code blocks are always visible */
 }
 
 .message-text pre code {
@@ -603,20 +688,27 @@ body {
     font-size: 0.9em;
     color: #e6e6e6;
     line-height: 1.5;
+    display: block;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    word-break: break-all;
 }
 
-/* Tables - Completely clean style with no lines */
+/* Tables - Clean style with proper wrapping */
 .message-text .table-wrapper {
     overflow-x: auto;
     margin: 1rem 0;
     -webkit-overflow-scrolling: touch;
+    max-width: 100%;
 }
 
 .message-text table {
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     border-collapse: collapse;
     font-size: 0.9rem;
-    min-width: max-content;
+    table-layout: auto;
 }
 
 .message-text th,
@@ -625,11 +717,35 @@ body {
     text-align: left;
     border: none;
     background: transparent;
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    max-width: 300px;
+    /* Prevent any single column from being too wide */
+    white-space: normal;
+}
+
+/* First column (usually names/keys) - more constrained */
+.message-text td:first-child,
+.message-text th:first-child {
+    max-width: 200px;
+    min-width: 80px;
+}
+
+/* Description columns - allow more space */
+.message-text td:nth-child(2),
+.message-text th:nth-child(2) {
+    max-width: 400px;
 }
 
 .message-text th {
     font-weight: 600;
     color: var(--text-primary);
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Subtle row hover for readability */
+.message-text tr:hover td {
+    background: rgba(255, 255, 255, 0.03);
 }
 
 /* Blockquotes */
@@ -734,8 +850,8 @@ body {
 }
 
 .attach-btn {
-    width: 32px;
-    height: 32px;
+    width: 28px;
+    height: 28px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -743,7 +859,7 @@ body {
     border: 1px solid var(--border-color);
     border-radius: 50%;
     color: var(--text-secondary);
-    font-size: 18px;
+    font-size: 14px;
     cursor: pointer;
     transition: all var(--transition-fast);
     flex-shrink: 0;
@@ -760,11 +876,12 @@ body {
     border: none;
     color: var(--text-primary);
     font-family: inherit;
-    font-size: 16px;
-    line-height: 1.5;
+    font-size: 15px;
+    line-height: 1.3;
     resize: none;
-    min-height: 24px;
-    max-height: 200px;
+    min-height: 20px;
+    max-height: 120px;
+    padding: 0;
 }
 
 #chatInput::placeholder {
@@ -811,9 +928,10 @@ body {
     border: none;
     border-radius: 50%;
     color: white;
-    font-size: 16px;
+    font-size: 14px;
     cursor: pointer;
     transition: all var(--transition-fast);
+    flex-shrink: 0;
 }
 
 #sendBtn:hover:not(:disabled) {
@@ -897,6 +1015,29 @@ body {
 }
 
 /* ========================================
+   Accessibility - Focus States
+   ======================================== */
+button:focus-visible,
+select:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+.chat-list-item:focus-visible,
+.suggestion-card:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+}
+
+/* Ensure focus is visible on dark backgrounds */
+.sidebar-btn:focus-visible,
+.top-bar-btn:focus-visible,
+.attach-btn:focus-visible,
+#sendBtn:focus-visible {
+    outline: 2px solid var(--accent-primary);
+    outline-offset: 2px;
+    box-shadow: 0 0 0 4px rgba(0, 217, 255, 0.2);
+}
+
+/* ========================================
    Mobile Responsive - Properly Scaled
    ======================================== */
 @media (max-width: 768px) {
@@ -939,6 +1080,14 @@ body {
 
     .top-bar {
         padding: 10px 12px;
+        transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    /* Scroll-to-hide: Hide top bar when scrolling up */
+    .top-bar.scroll-hidden {
+        transform: translateY(-100%);
+        opacity: 0;
+        pointer-events: none;
     }
 
     .model-selector {
@@ -946,11 +1095,24 @@ body {
     }
 
     .chat-messages {
-        padding: 0 12px 160px;
+        padding: 0 12px 100px;
+    }
+
+    /* Adjust when bars are hidden - more space for content */
+    .chat-area.bars-hidden {
+        padding-top: 0;
     }
 
     .input-container {
         padding: 8px 12px 8px;
+        transition: transform 0.3s ease, opacity 0.3s ease;
+    }
+
+    /* Scroll-to-hide: Hide input when scrolling up */
+    .input-container.scroll-hidden {
+        transform: translateY(100%);
+        opacity: 0;
+        pointer-events: none;
     }
 
     .input-box {

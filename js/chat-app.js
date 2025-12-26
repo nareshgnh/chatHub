@@ -38,9 +38,11 @@ class ChatApp {
         this.archivedChats = [];
         this.currentChatId = null;
         this.isLoading = false;
-        this.currentModel = config.DEFAULT_MODEL;
+        // Model will be loaded from Firebase in init()
+        this.currentModel = null;
         this.longPressTimer = null;
         this.selectedChatId = null;
+        this.suggestionsContainer = null;
 
         // Initialize
         this.init();
@@ -68,10 +70,16 @@ class ChatApp {
             this.inputField.style.height = Math.min(this.inputField.scrollHeight, 200) + 'px';
         });
 
-        // Model selector
+        // Load model from Firebase first, then populate selector
+        await this.loadModelFromFirebase();
         this.populateModelSelector();
-        this.modelSelector.addEventListener('change', (e) => {
+
+        // Model selector change handler
+        this.modelSelector.addEventListener('change', async (e) => {
             this.currentModel = e.target.value;
+            // Save to localStorage (instant) and Firebase (sync across devices)
+            localStorage.setItem('chatHub_selectedModel', this.currentModel);
+            chatStorage.saveSelectedModel(this.currentModel); // Don't await, let it sync in background
             this.showSystemMessage(`Switched to ${this.getModelName(this.currentModel)}`);
         });
 
@@ -83,13 +91,40 @@ class ChatApp {
 
         // Sidebar toggle
         if (this.menuToggle) {
-            this.menuToggle.addEventListener('click', () => this.toggleSidebar(true));
+            this.menuToggle.addEventListener('click', () => {
+                const isMobile = window.matchMedia('(max-width: 768px)').matches;
+                if (isMobile) {
+                    this.toggleSidebar(true); // Open sidebar on mobile
+                } else {
+                    this.sidebar.classList.remove('collapsed'); // Expand on desktop
+                    localStorage.setItem('chatHub_sidebarCollapsed', 'false');
+                }
+            });
         }
         if (this.closeSidebarBtn) {
-            this.closeSidebarBtn.addEventListener('click', () => this.toggleSidebar(false));
+            // On desktop, this toggles collapse; on mobile, it closes
+            this.closeSidebarBtn.addEventListener('click', () => {
+                const isMobile = window.matchMedia('(max-width: 768px)').matches;
+                if (isMobile) {
+                    this.toggleSidebar(false);
+                } else {
+                    this.toggleSidebar(); // Toggle (no argument)
+                }
+            });
         }
         if (this.sidebarOverlay) {
             this.sidebarOverlay.addEventListener('click', () => this.toggleSidebar(false));
+        }
+
+        // Restore sidebar state on desktop (default is expanded)
+        if (!window.matchMedia('(max-width: 768px)').matches) {
+            const isCollapsed = localStorage.getItem('chatHub_sidebarCollapsed');
+            // Only collapse if explicitly set to 'true', otherwise keep expanded
+            if (isCollapsed === 'true') {
+                this.sidebar.classList.add('collapsed');
+            } else {
+                this.sidebar.classList.remove('collapsed');
+            }
         }
 
         // Search functionality
@@ -110,16 +145,8 @@ class ChatApp {
             }
         }
 
-        // Suggestion cards
-        document.querySelectorAll('.suggestion-card').forEach(card => {
-            card.addEventListener('click', () => {
-                const prompt = card.dataset.prompt;
-                if (prompt) {
-                    this.inputField.value = prompt;
-                    this.sendMessage();
-                }
-            });
-        });
+        // Setup dynamic suggestions
+        this.setupSuggestions();
 
         // Close context menu on click outside
         document.addEventListener('click', () => this.hideContextMenu());
@@ -127,15 +154,251 @@ class ChatApp {
         // Pull-to-refresh setup for mobile PWA
         this.setupPullToRefresh();
 
+        // Scroll-to-hide for mobile (maximize reading space)
+        this.setupScrollToHide();
+
         // Load saved data from Firebase
         await this.loadChatHistory();
         this.loadCurrentChat();
+
+        // Load dynamic suggestions
+        await this.loadSuggestions();
 
         // Show welcome if empty
         this.updateWelcomeVisibility();
 
         // Focus input
         this.inputField.focus();
+    }
+
+    // ========================================
+    // Firebase Model Sync
+    // ========================================
+    async loadModelFromFirebase() {
+        try {
+            // First check localStorage (instant)
+            const localModel = localStorage.getItem('chatHub_selectedModel');
+            if (localModel && config.AVAILABLE_MODELS.some(m => m.id === localModel)) {
+                this.currentModel = localModel;
+                console.log('Loaded model from localStorage:', localModel);
+                return;
+            }
+
+            // Fallback to Firebase (for cross-device sync)
+            const savedModel = await chatStorage.getSelectedModel();
+            if (savedModel && config.AVAILABLE_MODELS.some(m => m.id === savedModel)) {
+                this.currentModel = savedModel;
+                // Also cache to localStorage for next time
+                localStorage.setItem('chatHub_selectedModel', savedModel);
+                console.log('Loaded model from Firebase:', savedModel);
+            } else {
+                this.currentModel = config.DEFAULT_MODEL;
+                console.log('Using default model:', config.DEFAULT_MODEL);
+            }
+        } catch (error) {
+            console.error('Error loading model from Firebase:', error);
+            this.currentModel = config.DEFAULT_MODEL;
+        }
+    }
+
+    // ========================================
+    // Dynamic Personalized Suggestions
+    // ========================================
+    setupSuggestions() {
+        this.suggestionsContainer = document.querySelector('.welcome-suggestions');
+
+        // Add refresh button handler
+        const refreshBtn = document.getElementById('refreshSuggestionsBtn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await this.refreshSuggestions();
+            });
+        }
+
+        // Add click handlers for dynamic suggestion cards
+        this.suggestionsContainer?.addEventListener('click', (e) => {
+            const card = e.target.closest('.suggestion-card');
+            if (card) {
+                const prompt = card.dataset.prompt;
+                if (prompt) {
+                    this.inputField.value = prompt;
+                    this.sendMessage();
+                }
+            }
+        });
+    }
+
+    async loadSuggestions() {
+        try {
+            // First, try to load from localStorage (fast, no network)
+            const cached = localStorage.getItem('chatHub_suggestions');
+            const cachedDate = localStorage.getItem('chatHub_suggestionsDate');
+            const today = new Date().toDateString();
+
+            if (cached && cachedDate === today) {
+                // Use locally cached suggestions from today
+                const suggestions = JSON.parse(cached);
+                if (Array.isArray(suggestions) && suggestions.length > 0) {
+                    this.renderSuggestions(suggestions);
+                    console.log('Loaded suggestions from cache');
+                    return;
+                }
+            }
+
+            // If no local cache, try Firebase (for cross-device sync)
+            const saved = await chatStorage.getSavedSuggestions();
+            if (saved && saved.generatedDate && saved.generatedDate.toDateString() === today && saved.suggestions?.length > 0) {
+                // Cache locally and render
+                localStorage.setItem('chatHub_suggestions', JSON.stringify(saved.suggestions));
+                localStorage.setItem('chatHub_suggestionsDate', today);
+                this.renderSuggestions(saved.suggestions);
+                console.log('Loaded suggestions from Firebase');
+                return;
+            }
+
+            // No valid cache found - render defaults for now
+            // User can click refresh to generate personalized ones
+            this.renderDefaultSuggestions();
+            console.log('Using default suggestions');
+        } catch (error) {
+            console.error('Error loading suggestions:', error);
+            this.renderDefaultSuggestions();
+        }
+    }
+
+    async refreshSuggestions() {
+        const refreshBtn = document.getElementById('refreshSuggestionsBtn');
+        if (refreshBtn) {
+            refreshBtn.innerHTML = '⟳';
+            refreshBtn.classList.add('spinning');
+        }
+
+        try {
+            await this.generatePersonalizedSuggestions();
+            this.showSystemMessage('✨ New suggestions generated!');
+        } catch (error) {
+            console.error('Error refreshing suggestions:', error);
+            this.showSystemMessage('Failed to refresh suggestions');
+        } finally {
+            if (refreshBtn) {
+                refreshBtn.innerHTML = '🔄';
+                refreshBtn.classList.remove('spinning');
+            }
+        }
+    }
+
+    async generatePersonalizedSuggestions() {
+        try {
+            // Get condensed topics from recent chats
+            const recentTopics = await chatStorage.getRecentTopics(10);
+
+            if (!recentTopics) {
+                // No chat history, use defaults
+                this.renderDefaultSuggestions();
+                return;
+            }
+
+            // Use AI to generate personalized suggestions (minimal tokens)
+            const apiKey = config.GROQ_API_KEY;
+            if (!apiKey) {
+                this.renderDefaultSuggestions();
+                return;
+            }
+
+            const response = await fetch(config.API_URL, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    messages: [
+                        {
+                            role: 'system',
+                            content: `Generate 4 personalized question suggestions based on user's interests. Return ONLY a JSON array with objects having "title" (2-4 words with emoji), "description" (short phrase), and "prompt" (full question). No markdown, just JSON.`
+                        },
+                        {
+                            role: 'user',
+                            content: `Recent topics:\n${recentTopics}\n\nGenerate 4 diverse follow-up questions I might want to explore.`
+                        }
+                    ],
+                    model: 'llama-3.1-8b-instant', // Use fast model for suggestions
+                    temperature: 0.8,
+                    max_tokens: 500
+                })
+            });
+
+            if (!response.ok) {
+                throw new Error('API request failed');
+            }
+
+            const data = await response.json();
+            const content = data.choices[0]?.message?.content || '';
+
+            // Parse JSON from response
+            const jsonMatch = content.match(/\[[\s\S]*\]/);
+            if (jsonMatch) {
+                const suggestions = JSON.parse(jsonMatch[0]);
+                if (Array.isArray(suggestions) && suggestions.length > 0) {
+                    // Save to localStorage (fast) and Firebase (sync)
+                    const today = new Date().toDateString();
+                    localStorage.setItem('chatHub_suggestions', JSON.stringify(suggestions));
+                    localStorage.setItem('chatHub_suggestionsDate', today);
+                    chatStorage.saveSuggestions(suggestions); // Don't await, let it happen in background
+                    this.renderSuggestions(suggestions);
+                    return;
+                }
+            }
+
+            // Fallback if parsing fails
+            this.renderDefaultSuggestions();
+        } catch (error) {
+            console.error('Error generating suggestions:', error);
+            this.renderDefaultSuggestions();
+        }
+    }
+
+    renderSuggestions(suggestions) {
+        if (!this.suggestionsContainer) return;
+
+        const html = suggestions.map(s => `
+            <div class="suggestion-card" 
+                 data-prompt="${this.escapeHtml(s.prompt)}"
+                 tabindex="0"
+                 role="button"
+                 aria-label="${this.escapeHtml(s.title)}: ${this.escapeHtml(s.description)}">
+                <div class="suggestion-title">${this.escapeHtml(s.title)}</div>
+                <div class="suggestion-desc">${this.escapeHtml(s.description)}</div>
+            </div>
+        `).join('');
+
+        this.suggestionsContainer.innerHTML = html;
+
+        // Add keyboard support for suggestion cards
+        this.suggestionsContainer.querySelectorAll('.suggestion-card').forEach(card => {
+            card.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    const prompt = card.dataset.prompt;
+                    if (prompt) {
+                        this.inputField.value = prompt;
+                        this.sendMessage();
+                    }
+                }
+            });
+        });
+    }
+
+
+    renderDefaultSuggestions() {
+        const defaults = [
+            { title: '💡 Explain a concept', description: 'Learn something new', prompt: 'Explain a programming concept I should know' },
+            { title: '✍️ Write code', description: 'Get coding help', prompt: 'Help me write efficient code' },
+            { title: '📚 Best practices', description: 'Industry standards', prompt: 'What are best practices for software development?' },
+            { title: '🐛 Debug help', description: 'Fix issues fast', prompt: 'Help me debug my code' }
+        ];
+        this.renderSuggestions(defaults);
     }
 
     // ========================================
@@ -192,9 +455,58 @@ class ChatApp {
         }, { passive: true });
     }
 
+    // ========================================
+    // Scroll-to-Hide for Mobile (maximize reading space)
+    // ========================================
+    setupScrollToHide() {
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+        if (!isMobile) return;
+
+        const topBar = document.querySelector('.top-bar');
+        const inputContainer = document.querySelector('.input-container');
+        let lastScrollTop = 0;
+        let scrollThreshold = 50; // Minimum scroll before triggering
+
+        this.chatArea.addEventListener('scroll', () => {
+            const scrollTop = this.chatArea.scrollTop;
+            const scrollHeight = this.chatArea.scrollHeight;
+            const clientHeight = this.chatArea.clientHeight;
+            const isAtBottom = scrollTop + clientHeight >= scrollHeight - 50;
+
+            // At bottom - always show both bars for typing
+            if (isAtBottom) {
+                topBar?.classList.remove('scroll-hidden');
+                inputContainer?.classList.remove('scroll-hidden');
+                lastScrollTop = scrollTop;
+                return;
+            }
+
+            const scrollDelta = scrollTop - lastScrollTop;
+
+            // Scrolling down (reading more content) - hide bars
+            if (scrollDelta > scrollThreshold) {
+                topBar?.classList.add('scroll-hidden');
+                inputContainer?.classList.add('scroll-hidden');
+                lastScrollTop = scrollTop;
+            }
+            // Scrolling up (going back) - show bars
+            else if (scrollDelta < -scrollThreshold) {
+                topBar?.classList.remove('scroll-hidden');
+                inputContainer?.classList.remove('scroll-hidden');
+                lastScrollTop = scrollTop;
+            }
+        }, { passive: true });
+
+        // Also show bars when input is focused
+        this.inputField.addEventListener('focus', () => {
+            topBar?.classList.remove('scroll-hidden');
+            inputContainer?.classList.remove('scroll-hidden');
+        });
+    }
+
     populateModelSelector() {
         this.modelSelector.innerHTML = config.AVAILABLE_MODELS.map(model =>
-            `<option value="${model.id}" ${model.id === config.DEFAULT_MODEL ? 'selected' : ''}>
+            `<option value="${model.id}" ${model.id === this.currentModel ? 'selected' : ''}>
                 ${model.name}
             </option>`
         ).join('');
@@ -206,12 +518,29 @@ class ChatApp {
     }
 
     toggleSidebar(show) {
-        if (show) {
-            this.sidebar.classList.add('open');
-            this.sidebarOverlay.classList.add('visible');
+        const isMobile = window.matchMedia('(max-width: 768px)').matches;
+
+        if (isMobile) {
+            // Mobile: slide in/out with overlay
+            if (show) {
+                this.sidebar.classList.add('open');
+                this.sidebarOverlay.classList.add('visible');
+            } else {
+                this.sidebar.classList.remove('open');
+                this.sidebarOverlay.classList.remove('visible');
+            }
         } else {
-            this.sidebar.classList.remove('open');
-            this.sidebarOverlay.classList.remove('visible');
+            // Desktop: collapse/expand sidebar
+            if (show === undefined) {
+                // Toggle based on current state
+                this.sidebar.classList.toggle('collapsed');
+            } else if (show) {
+                this.sidebar.classList.remove('collapsed');
+            } else {
+                this.sidebar.classList.add('collapsed');
+            }
+            // Save preference
+            localStorage.setItem('chatHub_sidebarCollapsed', this.sidebar.classList.contains('collapsed'));
         }
     }
 
@@ -472,22 +801,60 @@ class ChatApp {
     }
 
     renderMarkdown(text) {
-        if (typeof marked !== 'undefined') {
-            // Configure marked for GitHub Flavored Markdown with tables
-            marked.setOptions({
-                gfm: true,
-                breaks: true,
-                tables: true
-            });
-            return marked.parse(text || '');
+        // Preprocess: Fix common AI markdown issues
+        let processed = (text || '')
+            // Fix various quote characters to backticks (AI models sometimes output smart quotes)
+            .replace(/['']{3}/g, '```')   // Curly single quotes
+            .replace(/[""]{3}/g, '```')   // Curly double quotes  
+            .replace(/'{3}/g, '```')      // Straight single quotes
+            .replace(/"{3}/g, '```')      // Straight double quotes
+            // Fix headers without space: ###Header -> ### Header
+            .replace(/^(#{1,6})([^\s#])/gm, '$1 $2')
+            // Fix incomplete bold markers at end of stream: ** without closing **
+            .replace(/\*\*([^*]*)$/, '**$1**')
+            // Fix headers with incomplete bold: ### ** Text -> ### **Text**
+            .replace(/^(#{1,6}\s+)\*\*\s+/gm, '$1**');
+
+        // Handle unclosed code blocks during streaming
+        const codeBlockMatches = processed.match(/```/g) || [];
+        if (codeBlockMatches.length % 2 !== 0) {
+            // Odd number of code fences = unclosed block, add closing fence
+            processed += '\n```';
         }
-        return text
+
+        // Use markdown-it if available (preferred)
+        if (typeof markdownit !== 'undefined') {
+            const md = markdownit({
+                html: false,        // Disable HTML for security
+                breaks: true,       // Convert \n to <br>
+                linkify: true,      // Auto-convert URLs to links
+                typographer: false  // Disable smart quotes
+            });
+            return md.render(processed);
+        }
+
+        // Fallback: use marked if available
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({ gfm: true, breaks: true, tables: true });
+            try {
+                return marked.parse(processed);
+            } catch (e) {
+                console.error('Markdown parse error:', e);
+            }
+        }
+
+        // Ultimate fallback: manual regex parsing
+        return processed
             .replace(/```(\w*)\n([\s\S]*?)```/g, '<pre><code class="language-$1">$2</code></pre>')
             .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+            .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
             .replace(/\*([^*]+)\*/g, '<em>$1</em>')
+            .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+            .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+            .replace(/^# (.+)$/gm, '<h1>$1</h1>')
             .replace(/\n/g, '<br>');
     }
+
 
     highlightCode(container) {
         if (typeof hljs !== 'undefined') {
@@ -538,11 +905,14 @@ class ChatApp {
 
         let systemPrompt = `You are a helpful AI assistant. Be concise, accurate, and friendly.
 
-RULES:
-1. Answer questions directly and clearly
-2. Use code examples when relevant
-3. Format responses in Markdown
-4. Be conversational but professional`;
+RESPONSE STYLE RULES:
+1. Be CONCISE by default - give direct, clear answers
+2. Only give detailed/step-by-step responses when the user explicitly asks for explanations, tutorials, or comprehensive coverage
+3. Use relevant emojis for section headers and key points (e.g., 📌 for important notes, ✅ for steps, 💡 for tips, ⚠️ for warnings)
+4. Use code examples when relevant, properly formatted in markdown code blocks
+5. Use tables ONLY when comparing items or when it genuinely improves readability (not for simple lists)
+6. Format responses in clean Markdown with proper headers, bullet points, and emphasis
+7. Match response length to question complexity - simple questions get simple answers`;
 
         if (ragContext) {
             systemPrompt += `\n\nRELEVANT CONVERSATION HISTORY:\n"""\n${ragContext}\n"""`;
@@ -658,7 +1028,10 @@ RULES:
         // Refresh list
         await this.loadChatHistory();
         this.inputField.focus();
-        this.toggleSidebar(false);
+        // Only close sidebar on mobile
+        if (window.matchMedia('(max-width: 768px)').matches) {
+            this.toggleSidebar(false);
+        }
     }
 
     async loadChatHistory() {
@@ -782,7 +1155,10 @@ RULES:
 
             this.scrollToBottom();
             this.renderChatList();
-            this.toggleSidebar(false);
+            // Only close sidebar on mobile
+            if (window.matchMedia('(max-width: 768px)').matches) {
+                this.toggleSidebar(false);
+            }
         } catch (error) {
             console.error('Failed to load chat:', error);
         }
